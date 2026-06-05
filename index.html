@@ -297,6 +297,26 @@
     }
     .twk-swatch:hover { transform: scale(1.1); }
     .twk-swatch.on { border-color: rgba(0,0,0,0.55); transform: scale(1.1); }
+
+    .twk-text {
+      width: 100%; height: 28px;
+      border: 1px solid var(--border); border-radius: 5px;
+      padding: 0 8px; font-size: 11.5px; color: var(--text);
+      font-family: inherit; outline: none; background: white;
+    }
+    .twk-text:focus { border-color: var(--red); }
+    .twk-text::placeholder { color: var(--muted); }
+
+    /* Inline label editor */
+    .lbl-edit {
+      position: fixed; display: none; z-index: 400;
+      background: white; border: none;
+      outline: 2px solid var(--red);
+      font-family: system-ui,-apple-system,Helvetica,sans-serif;
+      font-weight: 600; color: var(--text);
+      padding: 0 6px; border-radius: 3px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
   </style>
 </head>
 <body>
@@ -415,6 +435,12 @@
       </div>
     </div>
 
+    <!-- Default label -->
+    <div class="twk-grp">
+      <div class="twk-row"><span>Default label text</span></div>
+      <input type="text" class="twk-text" id="inpDefaultLabel" placeholder="Potential Infringement" autocomplete="off">
+    </div>
+
     <!-- Color -->
     <div class="twk-grp">
       <div class="twk-row"><span>Color</span></div>
@@ -428,6 +454,9 @@
 
   </div>
 </div>
+
+<!-- Inline label editor -->
+<input type="text" id="lblEditInput" class="lbl-edit" autocomplete="off">
 
 <!-- Hidden file input -->
 <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" hidden>
@@ -461,6 +490,7 @@
     borderWeight: 1.5,
     labelStyle:   'badge',
     color:        '#dc2626',
+    defaultLabel: 'Potential Infringement',
   }, (() => { try { return JSON.parse(localStorage.getItem(TWEAK_KEY) || '{}'); } catch(e) { return {}; } })());
 
   function saveTweaks() {
@@ -499,6 +529,7 @@
       b.classList.toggle('on', b.dataset.val === tweaks.labelStyle));
     document.querySelectorAll('#optColor .twk-swatch').forEach(b =>
       b.classList.toggle('on', b.dataset.val === tweaks.color));
+    document.getElementById('inpDefaultLabel').value = tweaks.defaultLabel || 'Potential Infringement';
   }
 
   document.getElementById('slOpacity').addEventListener('input', e => {
@@ -526,6 +557,13 @@
       btn.classList.add('on');
       saveTweaks(); render();
     });
+  });
+
+  // Default label text input
+  const inpDefaultLabel = document.getElementById('inpDefaultLabel');
+  inpDefaultLabel.addEventListener('input', e => {
+    tweaks.defaultLabel = e.target.value || 'Potential Infringement';
+    saveTweaks(); render();
   });
 
   document.querySelectorAll('#optColor .twk-swatch').forEach(btn => {
@@ -565,9 +603,10 @@
   }
 
   // ── App state ─────────────────────────────────────────────
-  let baseData  = null;
-  let rects     = [];
-  let drawing   = false;
+  let baseData       = null;
+  let rects          = [];
+  let labelHitAreas  = [];
+  let drawing        = false;
   let sx = 0, sy = 0, cx = 0, cy = 0;
   let currentFilename = '';
 
@@ -660,8 +699,16 @@
   // ── Drawing ───────────────────────────────────────────────
   canvas.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
-    e.preventDefault();
     const p = toCanvas(e);
+    // Click on an existing label → open inline editor
+    for (const hit of labelHitAreas) {
+      if (p.x >= hit.x && p.x <= hit.x + hit.w && p.y >= hit.y && p.y <= hit.y + hit.h) {
+        e.preventDefault();
+        openLabelEditor(hit.rectIdx, hit.x, hit.y, hit.w, hit.h);
+        return;
+      }
+    }
+    e.preventDefault();
     drawing = true;
     sx = p.x; sy = p.y; cx = p.x; cy = p.y;
   });
@@ -677,7 +724,7 @@
     if (!drawing) return;
     drawing = false;
     if (Math.abs(cx - sx) > 8 && Math.abs(cy - sy) > 8) {
-      rects.push({ x1: sx, y1: sy, x2: cx, y2: cy });
+      rects.push({ x1: sx, y1: sy, x2: cx, y2: cy, label: tweaks.defaultLabel || 'Potential Infringement' });
     }
     render();
   });
@@ -712,6 +759,7 @@
     ctx.putImageData(baseData, 0, 0);
     const bcrw  = canvas.getBoundingClientRect().width;
     const scale = bcrw > 0 ? canvas.width / bcrw : 1;
+    labelHitAreas = [];
     rects.forEach((r, i) => drawBox(r, false, i + 1, scale));
     if (drawing) drawBox({ x1: sx, y1: sy, x2: cx, y2: cy }, true, 0, scale);
     updateCount();
@@ -744,14 +792,15 @@
     if (isTemp) return;
 
     // ── Label ──
-    if (T.labelStyle === 'banner') drawBanner(x, y, w, h, idx, fz, scale, color, radius);
-    else if (T.labelStyle === 'badge') drawBadge(x, y, w, h, idx, fz, scale, color);
+    const labelText = (r.label !== undefined ? r.label : null) || tweaks.defaultLabel || 'Potential Infringement';
+    if (T.labelStyle === 'banner') drawBanner(x, y, w, h, idx, labelText, fz, scale, color, radius);
+    else if (T.labelStyle === 'badge') drawBadge(x, y, w, h, idx, labelText, fz, scale, color);
     else if (T.labelStyle === 'dot')   drawDot(x, y, idx, fz, scale, color);
   }
 
   // Banner: text-width label anchored to the top-left corner of the box
-  function drawBanner(x, y, w, h, idx, fz, scale, color, radius) {
-    const label = `#${idx}  Potential Infringement`;
+  function drawBanner(x, y, w, h, idx, labelText, fz, scale, color, radius) {
+    const label = `#${idx}  ${labelText}`;
     const px = 9 * scale, py = 4 * scale;
     const lh = fz + py * 2;
     ctx.font = `700 ${fz}px system-ui,-apple-system,Helvetica,sans-serif`;
@@ -774,11 +823,12 @@
     ctx.fillStyle    = 'white';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, x + px, y + lh / 2);
+    labelHitAreas.push({ rectIdx: idx - 1, x, y, w: lw2, h: lh });
   }
 
   // Badge: floating pill that overlaps the top border — slick look
-  function drawBadge(x, y, w, h, idx, fz, scale, color) {
-    const label = `#${idx}  Potential Infringement`;
+  function drawBadge(x, y, w, h, idx, labelText, fz, scale, color) {
+    const label = `#${idx}  ${labelText}`;
     const px = 10 * scale, py = 5 * scale;
     ctx.font = `600 ${fz}px system-ui,-apple-system,Helvetica,sans-serif`;
     const tw  = ctx.measureText(label).width;
@@ -802,6 +852,7 @@
     ctx.textBaseline = 'middle';
     ctx.font = `600 ${fz}px system-ui,-apple-system,Helvetica,sans-serif`;
     ctx.fillText(label, bx + px, by + lh / 2, lw2 - px * 2);
+    labelHitAreas.push({ rectIdx: idx - 1, x: bx, y: by, w: lw2, h: lh });
   }
 
   // Dot: numbered circle in the top-left corner
@@ -857,6 +908,53 @@
     undoBtn.disabled = n === 0;
     clearBtn.disabled = n === 0;
   }
+
+  // ── Inline label editor ──────────────────────────────────
+  const lblEditInput = document.getElementById('lblEditInput');
+
+  function openLabelEditor(rectIdx, cx2, cy2, cw, ch) {
+    const r   = canvas.getBoundingClientRect();
+    const sx2 = r.width  / canvas.width;
+    const sy2 = r.height / canvas.height;
+    const ex  = cx2 * sx2 + r.left;
+    const ey  = cy2 * sy2 + r.top + window.scrollY;
+    const ew  = Math.max(cw * sx2, 160);
+    const eh  = Math.max(ch * sy2, 22);
+    const fs  = Math.max(10, Math.min(14, ch * sy2 * 0.55));
+
+    lblEditInput.style.left      = ex + 'px';
+    lblEditInput.style.top       = ey + 'px';
+    lblEditInput.style.width     = ew + 'px';
+    lblEditInput.style.height    = eh + 'px';
+    lblEditInput.style.fontSize  = fs + 'px';
+    lblEditInput.style.display   = 'block';
+    lblEditInput.dataset.idx     = rectIdx;
+    // show just the editable text part (without the #N prefix)
+    lblEditInput.value = rects[rectIdx].label !== undefined
+      ? rects[rectIdx].label
+      : (tweaks.defaultLabel || 'Potential Infringement');
+    lblEditInput.focus();
+    lblEditInput.select();
+  }
+
+  function closeLabelEditor(save) {
+    if (save) {
+      const idx = +lblEditInput.dataset.idx;
+      if (!isNaN(idx) && rects[idx]) {
+        rects[idx].label = lblEditInput.value.trim() || tweaks.defaultLabel || 'Potential Infringement';
+        render();
+      }
+    }
+    lblEditInput.style.display = 'none';
+    lblEditInput.dataset.idx   = '';
+  }
+
+  lblEditInput.addEventListener('blur',    () => closeLabelEditor(true));
+  lblEditInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter')  { closeLabelEditor(true);  e.preventDefault(); }
+    if (e.key === 'Escape') { closeLabelEditor(false); }
+    e.stopPropagation(); // prevent undo shortcut while typing
+  });
 
   updateCount();
 </script>
