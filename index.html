@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Infringement Marker</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --red: #dc2626;
+      --red-bg: rgba(220, 38, 38, 0.07);
+      --dark: #111827;
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --soft: #64748b;
+      --muted: #94a3b8;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--dark);
+      height: 52px;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .h-left { display: flex; align-items: center; gap: 11px; }
+
+    .brand-mark {
+      width: 28px; height: 28px;
+      background: var(--red);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .brand-name {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: white;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
+    }
+
+    .h-sep { width: 1px; height: 16px; background: rgba(255,255,255,0.1); }
+
+    .file-name {
+      font-size: 12px;
+      color: var(--muted);
+      max-width: 340px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .h-right { display: flex; align-items: center; gap: 7px; }
+
+    .btn {
+      height: 30px;
+      padding: 0 14px;
+      border: none;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.12s, background 0.12s;
+      white-space: nowrap;
+    }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .btn-ghost {
+      background: rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.72);
+    }
+    .btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.14); color: white; }
+
+    .btn-red {
+      background: var(--red);
+      color: white;
+    }
+    .btn-red:hover:not(:disabled) { opacity: 0.86; }
+
+    /* ── Main ── */
+    main {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 28px;
+    }
+
+    /* ── Upload zone ── */
+    .upload-zone {
+      width: 460px;
+      height: 300px;
+      background: var(--surface);
+      border: 2px dashed var(--border);
+      border-radius: 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 13px;
+      cursor: pointer;
+      transition: border-color 0.18s, background 0.18s, transform 0.12s;
+      user-select: none;
+    }
+    .upload-zone:hover { border-color: #fca5a5; background: var(--red-bg); }
+    .upload-zone.over { border-color: var(--red); background: var(--red-bg); transform: scale(1.01); }
+
+    .upload-icon-wrap {
+      width: 52px; height: 52px;
+      background: var(--bg);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .upload-title { font-size: 15px; font-weight: 600; color: var(--text); }
+    .upload-sub { font-size: 13px; color: var(--muted); }
+
+    .chips { display: flex; gap: 5px; margin-top: 2px; }
+    .chip {
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      color: var(--soft);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 2px 8px;
+    }
+
+    /* ── Canvas wrapper ── */
+    .canvas-wrap {
+      display: none;
+      position: relative;
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.07), 0 6px 24px rgba(0,0,0,0.11);
+      background: white;
+      line-height: 0;
+    }
+    .canvas-wrap.on { display: block; }
+
+    #canvas {
+      display: block;
+      max-width: calc(100vw - 56px);
+      cursor: crosshair;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* ── Loading ── */
+    .loading {
+      position: absolute; inset: 0;
+      background: rgba(255,255,255,0.82);
+      display: none;
+      align-items: center; justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .loading.on { display: flex; }
+
+    .spin {
+      width: 28px; height: 28px;
+      border: 3px solid var(--border);
+      border-top-color: var(--red);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .load-label { font-size: 12px; color: var(--soft); }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      height: 50px;
+      padding: 0 20px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .toolbar.on { display: flex; }
+
+    .tbtn {
+      height: 30px; padding: 0 12px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 12px; font-weight: 500;
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s;
+      display: flex; align-items: center; gap: 5px;
+      white-space: nowrap;
+    }
+    .tbtn:hover:not(:disabled) { background: var(--bg); }
+    .tbtn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .tbtn-danger { color: var(--red); border-color: transparent; }
+    .tbtn-danger:hover:not(:disabled) { background: var(--red-bg); border-color: rgba(220,38,38,0.2); }
+
+    .t-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
+
+    .hint {
+      font-size: 11.5px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .hint kbd {
+      font-family: inherit;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 0 4px;
+      font-size: 10px;
+      color: var(--soft);
+    }
+
+    .count {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--soft);
+      white-space: nowrap;
+    }
+    .count.active { color: var(--red); }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="h-left">
+    <div class="brand-mark">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path d="M2.5 1.5v11" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M2.5 2h9L9 5.5 11.5 9H2.5" fill="rgba(255,255,255,0.22)" stroke="white" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <span class="brand-name">Infringement Marker</span>
+    <div class="h-sep"></div>
+    <span class="file-name" id="fname">No file loaded</span>
+  </div>
+  <div class="h-right">
+    <button class="btn btn-ghost" id="newBtn">New</button>
+    <button class="btn btn-red" id="exportBtn" disabled>Export PNG</button>
+  </div>
+</header>
+
+<!-- ── Main ── -->
+<main>
+
+  <!-- Upload zone -->
+  <div class="upload-zone" id="uploadZone">
+    <div class="upload-icon-wrap">
+      <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+        <path d="M13 18V10M13 10l-4 4M13 10l4 4" stroke="#94a3b8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M5 22h16M21 18v1a3 3 0 01-3 3H8a3 3 0 01-3-3v-1" stroke="#cbd5e1" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="upload-title">Drop file here or click to upload</div>
+    <div class="upload-sub">Screenshot, scan, or exported page</div>
+    <div class="chips">
+      <span class="chip">JPG</span>
+      <span class="chip">PNG</span>
+      <span class="chip">PDF</span>
+    </div>
+  </div>
+
+  <!-- Canvas wrapper -->
+  <div class="canvas-wrap" id="canvasWrap">
+    <canvas id="canvas"></canvas>
+    <div class="loading" id="loading">
+      <div class="spin"></div>
+      <span class="load-label">Loading file…</span>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Toolbar ── -->
+<div class="toolbar" id="toolbar">
+  <button class="tbtn" id="undoBtn" disabled>
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <path d="M1.5 4.5h5A3 3 0 1 1 6.5 10H4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M3.5 2.5L1.5 4.5L3.5 6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    Undo
+  </button>
+  <button class="tbtn tbtn-danger" id="clearBtn" disabled>Clear All</button>
+  <div class="t-sep"></div>
+  <span class="hint">Drag to mark &nbsp;·&nbsp; Right-click a marker to remove &nbsp;·&nbsp; <kbd>⌘Z</kbd> undo</span>
+  <span class="count" id="count">No markers</span>
+</div>
+
+<!-- Hidden file input -->
+<input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" hidden>
+
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  // ── DOM refs ──
+  const canvas    = document.getElementById('canvas');
+  const ctx       = canvas.getContext('2d');
+  const uploadZone= document.getElementById('uploadZone');
+  const canvasWrap= document.getElementById('canvasWrap');
+  const toolbar   = document.getElementById('toolbar');
+  const loading   = document.getElementById('loading');
+  const fnameEl   = document.getElementById('fname');
+  const exportBtn = document.getElementById('exportBtn');
+  const undoBtn   = document.getElementById('undoBtn');
+  const clearBtn  = document.getElementById('clearBtn');
+  const newBtn    = document.getElementById('newBtn');
+  const countEl   = document.getElementById('count');
+  const fileInput = document.getElementById('fileInput');
+
+  // ── State ──
+  let baseData  = null;
+  let rects     = [];
+  let drawing   = false;
+  let sx = 0, sy = 0, cx = 0, cy = 0;
+  let currentFilename = '';
+
+  // ── File handling ──────────────────────────────────────────
+
+  uploadZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) load(e.target.files[0]); });
+
+  uploadZone.addEventListener('dragover',  e => { e.preventDefault(); uploadZone.classList.add('over'); });
+  uploadZone.addEventListener('dragleave', ()  => uploadZone.classList.remove('over'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault(); uploadZone.classList.remove('over');
+    if (e.dataTransfer.files[0]) load(e.dataTransfer.files[0]);
+  });
+
+  // Drop anywhere on page
+  document.addEventListener('dragover', e => e.preventDefault());
+  document.addEventListener('drop', e => {
+    e.preventDefault();
+    if (e.dataTransfer.files[0]) load(e.dataTransfer.files[0]);
+  });
+
+  async function load(file) {
+    const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isImg = file.type.startsWith('image/');
+    if (!isPDF && !isImg) { alert('Please upload a JPG, PNG, or PDF file.'); return; }
+    showLoading();
+    try {
+      if (isPDF) await loadPDF(file);
+      else       await loadImg(file);
+    } catch(e) {
+      alert('Could not load file: ' + e.message);
+      hideLoading();
+    }
+  }
+
+  async function loadImg(file) {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+    canvas.width  = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0);
+    baseData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(url);
+    showEditor(file.name);
+  }
+
+  async function loadPDF(file) {
+    const ab  = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    const pg  = await pdf.getPage(1);
+    const vp  = pg.getViewport({ scale: 2 });
+    canvas.width  = vp.width;
+    canvas.height = vp.height;
+    await pg.render({ canvasContext: ctx, viewport: vp }).promise;
+    baseData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const suffix = pdf.numPages > 1 ? ` (p.1 of ${pdf.numPages})` : '';
+    showEditor(file.name + suffix);
+  }
+
+  function showLoading() {
+    canvasWrap.classList.add('on');
+    loading.classList.add('on');
+    uploadZone.style.display = 'none';
+  }
+  function hideLoading() { loading.classList.remove('on'); }
+
+  function showEditor(name) {
+    rects = [];
+    currentFilename = name;
+    fnameEl.textContent = name;
+    exportBtn.disabled = false;
+    uploadZone.style.display = 'none';
+    canvasWrap.classList.add('on');
+    toolbar.classList.add('on');
+    hideLoading();
+    render();
+  }
+
+  newBtn.addEventListener('click', () => {
+    rects = []; baseData = null; currentFilename = '';
+    canvasWrap.classList.remove('on');
+    toolbar.classList.remove('on');
+    uploadZone.style.display = '';
+    fnameEl.textContent = 'No file loaded';
+    exportBtn.disabled = true;
+    fileInput.value = '';
+    updateCount();
+  });
+
+  // ── Drawing ────────────────────────────────────────────────
+
+  canvas.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const p = toCanvas(e);
+    drawing = true;
+    sx = p.x; sy = p.y; cx = p.x; cy = p.y;
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    if (!drawing) return;
+    const p = toCanvas(e);
+    cx = p.x; cy = p.y;
+    render();
+  });
+
+  // Use window so mouseup outside canvas still ends the drag cleanly
+  window.addEventListener('mouseup', e => {
+    if (!drawing) return;
+    drawing = false;
+    if (Math.abs(cx - sx) > 8 && Math.abs(cy - sy) > 8) {
+      rects.push({ x1: sx, y1: sy, x2: cx, y2: cy });
+    }
+    render();
+  });
+
+  // Right-click removes the topmost rect under cursor
+  canvas.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const p = toCanvas(e);
+    for (let i = rects.length - 1; i >= 0; i--) {
+      const { x, y, w, h } = normalise(rects[i]);
+      if (p.x >= x && p.x <= x + w && p.y >= y && p.y <= y + h) {
+        rects.splice(i, 1); render(); break;
+      }
+    }
+  });
+
+  function toCanvas(e) {
+    const r  = canvas.getBoundingClientRect();
+    const sx2 = canvas.width  / r.width;
+    const sy2 = canvas.height / r.height;
+    return { x: (e.clientX - r.left) * sx2, y: (e.clientY - r.top) * sy2 };
+  }
+
+  function normalise(r) {
+    const x = Math.min(r.x1, r.x2), y = Math.min(r.y1, r.y2);
+    return { x, y, w: Math.abs(r.x2 - r.x1), h: Math.abs(r.y2 - r.y1) };
+  }
+
+  // ── Render ─────────────────────────────────────────────────
+
+  function render() {
+    if (!baseData) return;
+    ctx.putImageData(baseData, 0, 0);
+
+    // Scale factor so strokes/fonts appear consistent regardless of image resolution
+    const bcrw = canvas.getBoundingClientRect().width;
+    const scale = bcrw > 0 ? canvas.width / bcrw : 1;
+
+    rects.forEach((r, i) => drawBox(r, false, i + 1, scale));
+    if (drawing) drawBox({ x1: sx, y1: sy, x2: cx, y2: cy }, true, 0, scale);
+
+    updateCount();
+  }
+
+  function drawBox(r, isTemp, idx, scale) {
+    const { x, y, w, h } = normalise(r);
+    if (w < 6 || h < 6) return;
+
+    const lw  = 2 * scale;
+    const fz  = 11.5 * scale;
+    const px  = 8 * scale;
+    const py  = 4.5 * scale;
+
+    // Semi-transparent red fill
+    ctx.fillStyle = 'rgba(220,38,38,0.13)';
+    ctx.fillRect(x, y, w, h);
+
+    // Border
+    ctx.strokeStyle = isTemp ? 'rgba(220,38,38,0.4)' : '#dc2626';
+    ctx.lineWidth   = lw;
+    ctx.setLineDash(isTemp ? [7 * scale, 4 * scale] : []);
+    ctx.strokeRect(x + lw / 2, y + lw / 2, w - lw, h - lw);
+    ctx.setLineDash([]);
+
+    if (!isTemp) {
+      const label  = `#${idx}  Potential Infringement`;
+      ctx.font = `700 ${fz}px system-ui,-apple-system,Helvetica,sans-serif`;
+      const lh = fz + py * 2;
+
+      // Label background band
+      ctx.fillStyle = '#dc2626';
+      ctx.fillRect(x, y, w, lh);
+
+      // Label text (clipped to rect width)
+      ctx.fillStyle    = 'white';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, x + px, y + lh / 2, w - px * 2);
+    }
+  }
+
+  // ── Controls ───────────────────────────────────────────────
+
+  undoBtn.addEventListener('click', () => {
+    if (rects.length) { rects.pop(); render(); }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    if (rects.length && confirm('Clear all markers?')) { rects = []; render(); }
+  });
+
+  document.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      if (rects.length) { rects.pop(); render(); }
+    }
+  });
+
+  exportBtn.addEventListener('click', () => {
+    drawing = false; render();
+    const base = currentFilename.replace(/\s*\(p\.\d+.*\)$/, '').replace(/\.[^.]+$/, '');
+    const a = document.createElement('a');
+    a.download = `${base}_infringement_marked.png`;
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  });
+
+  function updateCount() {
+    const n = rects.length;
+    countEl.textContent = n === 0 ? 'No markers' : `${n} marker${n !== 1 ? 's' : ''}`;
+    countEl.classList.toggle('active', n > 0);
+    undoBtn.disabled = n === 0;
+    clearBtn.disabled = n === 0;
+  }
+
+  updateCount();
+</script>
+</body>
+</html>
